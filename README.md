@@ -5,6 +5,9 @@ The problem of classifying a given person image by 3-criteria
  - Age: `0 to 29`, `30 to 59`, `60~`
 <br> <br>
 
+### [Click for Detail process in wrap-up report](https://www.notion.so/P-Stage1-Wrap-up-Report-b8e25c84cfb64420928685dc1f7726b9)
+<br>
+
 **Model Structure**
 > Fine Tuning with using 3 additional Heads(each for Mask wear form, gender and age) with Pre-Trained Models
  - Backbone Model: `ResNet50`, `EfficientNet-b4`, `ResNest200e`, `Vit`
