@@ -17,18 +17,20 @@ class CFG:
     PROJECT_PATH = "/opt/ml" # 기본 프로젝트 디렉터리
     BASE_DATA_PATH = '/opt/ml/input/data/eval' # Test 데이터가 저장된 디렉터리
 
-    batch_size = 16 # 배치 사이즈
-    num_workers = 4 # 워커의 개수
-    seed = 42 # random seed
+    # predict envirionment
+    batch_size = 16
+    num_workers = 4
+    seed = 42
     resize_width = 380
     resize_height = 380
 
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu') # GPU 메모리 사용
-    model = "EfficientNetMaskClassifier"
+    # model environment
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     test_augmentation = "BaseAugmentation"
 
+    # data route
     img_dir = 'images'
-    submission_path = 'info.csv' # submission csv 파일
+    submission_path = 'info.csv'
     docs_path = 'docs'
     model_path = 'models'
 

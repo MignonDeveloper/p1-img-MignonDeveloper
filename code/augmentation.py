@@ -17,7 +17,6 @@ class BaseAugmentation:
         return self.transformer(image=image)
 
 
-
 class CenterCropBaseAugmentation:
     def __init__(self, resize_height, resize_width):
         self.resize_height = resize_height
@@ -30,7 +29,6 @@ class CenterCropBaseAugmentation:
 
     def __call__(self, image):
         return self.transformer(image=image)
-
 
 
 class ResizeVariousAugmentation:
@@ -48,7 +46,6 @@ class ResizeVariousAugmentation:
 
     def __call__(self, image):
         return self.transformer(image=image)
-
 
 
 class CenterCropVariousAugmentation:

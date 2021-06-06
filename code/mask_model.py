@@ -31,12 +31,12 @@ class EfficientNetMaskClassifier(nn.Module):
         backbone = torch.nn.Sequential(*(list(backbone_pre.children())[:-1]))
         self.backbone = backbone
 
-        # set 3heads for mask, gender, age
-        self.mask_layer = self.get_classifier(3)
-        self.gender_layer = self.get_classifier(2)
-        self.age_layer = self.get_classifier(3)
+        # set 3 heads for mask, gender, age
+        self.mask_layer = self.__get_classifier(3)
+        self.gender_layer = self.__get_classifier(2)
+        self.age_layer = self.__get_classifier(3)
 
-        # initialize weights in classifier heads
+        # initialize weights with kaiming_normalization in classifier heads
         self.classifier_layers = [self.mask_layer, self.gender_layer, self.age_layer]
         for layer in self.classifier_layers:
             for m in layer.modules():
@@ -57,7 +57,16 @@ class EfficientNetMaskClassifier(nn.Module):
         return mask_class, gender_class, age_class
 
 
-    def get_classifier(self, output_features):
+    def __get_classifier(self, output_features):
+        """
+        get linear layer for each head with different structure
+
+        Args:
+            output_features (int): number of output target for each head
+
+        Returns:
+            classifier (nn.Linear): linear layer for each classification head
+        """        
         classifier = nn.Sequential(
             nn.Linear(self.in_features, output_features)
         )
@@ -94,7 +103,7 @@ class ResNestMaskClassifier(nn.Module):
         self.gender_layer = self.get_classifier(2)
         self.age_layer = self.get_classifier(3)
 
-        # initialize weights in classifier heads
+        # initialize weights with kaiming_normalization in classifier heads
         self.classifier_layers = [self.mask_layer, self.gender_layer, self.age_layer]
         for layer in self.classifier_layers:
             for m in layer.modules():
@@ -122,7 +131,7 @@ class ResNestMaskClassifier(nn.Module):
         return classifier
 
 
-
+# final classification module for Deti backbone
 class DetiFinalClassifier(nn.Module):
     def __init__(self, in_features):
         super(DetiFinalClassifier, self).__init__()
@@ -149,7 +158,6 @@ class DetiFinalClassifier(nn.Module):
         return mask_class, gender_class, age_class
 
 
-
 class DeTiMaskClassifier(nn.Module):
     '''
         Backbone: vit_deit_base_patch16_384
@@ -173,11 +181,9 @@ class DeTiMaskClassifier(nn.Module):
         return self.net(x)
 
 
-
-
 class EfficientNetDropoutMaskClassifier(nn.Module):
     '''
-        Backbone: EfficientNet-b4
+        Backbone: EfficientNet-b4 with dropout
         Classifier: After get feature map from backbone, make 3 heads to decision each feature
             - mask
             - gender
@@ -200,12 +206,12 @@ class EfficientNetDropoutMaskClassifier(nn.Module):
         backbone = torch.nn.Sequential(*(list(backbone_pre.children())[:-1]))
         self.backbone = backbone
 
-        # set 3heads for mask, gender, age
-        self.mask_layer = self.get_classifier(3)
-        self.gender_layer = self.get_classifier(2)
-        self.age_layer = self.get_classifier(3)
+        # set 3 heads for mask, gender, age
+        self.mask_layer = self.__get_classifier(3)
+        self.gender_layer = self.__get_classifier(2)
+        self.age_layer = self.__get_classifier(3)
 
-        # initialize weights in classifier heads
+        # initialize weights with kaiming_normalization in classifier heads
         self.classifier_layers = [self.mask_layer, self.gender_layer, self.age_layer]
         for layer in self.classifier_layers:
             for m in layer.modules():
@@ -226,7 +232,17 @@ class EfficientNetDropoutMaskClassifier(nn.Module):
         return mask_class, gender_class, age_class
 
 
-    def get_classifier(self, output_features):
+    def __get_classifier(self, output_features):
+        """
+        get linear layer for each head with different structure
+
+        Args:
+            output_features (int): number of output target for each head
+
+        Returns:
+            classifier (nn.Sequential): linear layer with batch normalization & dropout for each classification head
+        """ 
+
         classifier = nn.Sequential(
             nn.Linear(self.in_features, self.mid_featrues),
             nn.BatchNorm1d(self.mid_featrues),

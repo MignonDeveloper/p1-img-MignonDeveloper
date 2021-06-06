@@ -16,7 +16,6 @@ from PIL import Image
 import os, random, math, pprint
 from tqdm import tqdm
 from importlib import import_module
-
 import neptune.new as neptune
 
 from mask_dataset import MaskTrainDataset, MaskValDataset
@@ -25,7 +24,8 @@ from optimizer import create_optimizer
 from scheduler import create_scheduler
 from pytorch_tools import EarlyStopping
 
-# neptune.ai 를 활용한 experiment 관리
+
+# neptune.ai를 활용한 experiment 관리
 run = neptune.init(project='user_name/Project_name',
 				   api_token='user_token',
                    source_files='*.py')
@@ -35,16 +35,18 @@ class CFG:
     PROJECT_PATH = "/opt/ml" # 기본 프로젝트 디렉터리
     BASE_DATA_PATH = '/opt/ml/input/data/train' # 데이터가 저장된 디렉터리
 
+    # set hyper parameters for train environment
     learning_rate = 1e-3
     batch_size = 32
     num_workers = 4
     print_freq = 1
     nepochs = 40
     seed = 42
-    patience = 10 # patience for Early stopping
+    patience = 10
     resize_width = 380
     resize_height = 380
 
+    # set model environment
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     model = "EfficientNetMaskClassifier"
     kfold = 0
@@ -55,14 +57,15 @@ class CFG:
     scheduler = "StepLR"
     description = "Modeling" 
 
+    # set data environment
     img_dir = 'images' # image directory path
     csv_path = 'train_st_df.csv' # train csv file
     docs_path = 'docs' # result, visualization image path
     model_path = 'models' # trained model path
 
 
-# Config Parsing
 def get_config():
+    ''' Config Parsing by argparser '''
     parser = argparse.ArgumentParser(description="Mask Classification")
 
     # Container environment
@@ -91,7 +94,6 @@ def get_config():
     parser.add_argument('--description', type=str, default=CFG.description, help='model description')
 
     args = parser.parse_args()
-    # print(args) # for check arguments
     
     CFG.PROJECT_PATH = args.PROJECT_PATH
     CFG.BASE_DATA_PATH = args.BASE_DATA_PATH
@@ -120,12 +122,11 @@ def get_config():
     CFG.docs_path = os.path.join(CFG.PROJECT_PATH, CFG.docs_path)
     CFG.model_path = os.path.join(CFG.PROJECT_PATH, CFG.model_path)
     
-    # for check CFG
-    # pprint.pprint(CFG.__dict__) 
+    # pprint.pprint(CFG.__dict__) # for check CFG
 
 
 def set_random_seed():
-    # for Reproducible Model
+    ''' for Reproducible Model experiment, set random seed '''
     torch.manual_seed(CFG.seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
@@ -136,7 +137,7 @@ def set_random_seed():
 
 
 def set_logging():
-    # experiments 관리 with  neptune.ai
+    ''' experiments management with neptune.ai '''
     params = {
         "csv_path": CFG.csv_path,
         "learning_rate": CFG.learning_rate,
@@ -161,13 +162,13 @@ def set_logging():
 
 
 def get_data():
-    # read csv file containing image information
+    ''' read csv file containing image information '''
     train_df = pd.read_csv(CFG.csv_path)
     return train_df
 
 
 def data_visualization(train_df):
-    # visulization image along with information (mask formation, age, gender)
+    ''' visulization image along with image information & target(mask formation, age, gender) '''
     choices = random.choices(range(len(train_df['path'])), k=6)
     img_paths = [ os.path.join(CFG.img_dir, train_df['path'][i]) for i in choices ]
     img_label = [ f"{train_df['path'][i].split('/')[-1]}, age: {train_df['age'][i]}, gender: {train_df['gender'][i]}" for i in choices ]
@@ -184,15 +185,15 @@ def data_visualization(train_df):
     plt.savefig(os.path.join(CFG.docs_path, 'mask_train_data_viz.png'))
 
 
-# train datset과 validation dataset에 사람이 겹쳐서 data leakage가 발생하지 않도록 stratified split
 def get_stratified_data(train_df):
+    ''' stratified split by user to prevent data leakage '''
     stratified_k_fold = StratifiedKFold(n_splits=5, shuffle=True, random_state=CFG.seed)
 
     X = train_df['path'].to_numpy()
     X = CFG.img_dir + '/' + X
-    # y = train_df['gender_class', 'age_class', 'mask_class'].to_numpy()
     y = train_df['st_class'].to_numpy()
 
+    # select fold for training
     for idx, (train_index, test_index) in enumerate(stratified_k_fold.split(X, y)):
         if idx == CFG.kfold:    
             X_stratified_train = X[train_index]
@@ -245,16 +246,19 @@ def get_stratified_data(train_df):
 
 
 def get_data_iter(X_stratified_train, X_stratified_test, y_stratified_train, y_stratified_test):
+    ''' get pytorch dataset & data loader '''
 
+    # get transformer module for each train and valid dataset
     train_transformer_module = getattr(import_module("augmentation"), CFG.train_augmentation)
     test_transformer_module = getattr(import_module("augmentation"), CFG.test_augmentation)
-
     train_transformer = train_transformer_module(resize_height=CFG.resize_height, resize_width=CFG.resize_width)
     test_transformer = test_transformer_module(resize_height=CFG.resize_height, resize_width=CFG.resize_width)
 
+    # get mask dataset
     mask_train_dataset = MaskTrainDataset(image_path=X_stratified_train, output_class=y_stratified_train, transformer=train_transformer)
     mask_test_dataset = MaskValDataset(image_path=X_stratified_test, output_class=y_stratified_test, transformer=test_transformer)
 
+    # get mask data loader from defined dataset
     train_iter = torch.utils.data.DataLoader(mask_train_dataset, batch_size=CFG.batch_size, shuffle=True, num_workers=CFG.num_workers)
     test_iter = torch.utils.data.DataLoader(mask_test_dataset, batch_size=CFG.batch_size, shuffle=True, num_workers=CFG.num_workers)
 
@@ -262,27 +266,27 @@ def get_data_iter(X_stratified_train, X_stratified_test, y_stratified_train, y_s
 
 
 def get_model(train_iter):
-    # mask_model.py에 정의된 특정 모델을 가져옵니다.
+    # get model from mask_model.py and define with parameters
     model_module = getattr(import_module("mask_model"), CFG.model)
     model = model_module()
 
-    # 모델의 파라미터를 GPU 메모리로 옮깁니다.
+    # Upload data to gpu memory
     model.cuda()    
     
-    # 모델의 파라미터 수를 출력합니다.
+    # print number of parameters(weights) of defined model
     print('parameters: ', sum(p.numel() for p in model.parameters() if p.requires_grad))
     
-    # GPU가 2개 이상이면 데이터패러럴로 학습 가능하게 만듭니다.
+    # if exists more than 2 GPUs, use DataParallel training
     n_gpu = torch.cuda.device_count()
     if n_gpu > 1:
         model = torch.nn.DataParallel(model)
 
-    # loss.py에 정의된 criterion을 가져옵니다. 
+    # get criterion from loss.py and define with parameters 
     criterion_mask = create_criterion(CFG.criterion, classes=3, smoothing=0.05)
     criterion_gender = create_criterion('cross_entropy')
     criterion_age = create_criterion(CFG.criterion, classes=3, smoothing=0.05)
 
-    # optimizer.py에 정의된 optimizer를 가져옵니다.
+    # get optimizer from optimizer.py and define with parameters 
     optimizer_backbone = create_optimizer(
         CFG.optimizer,
         params=model.backbone.parameters(),
@@ -302,7 +306,7 @@ def get_model(train_iter):
         weight_decay=1e-2
     )
 
-    # scheduler.py에 정의된 scheduler를 가져옵니다.
+    # get scheduler from scheduler.py and define with parameters 
     scheduler_backbone = create_scheduler(
         CFG.scheduler,
         optimizer=optimizer_backbone,
@@ -325,8 +329,8 @@ def get_model(train_iter):
     return model, criterion_mask, criterion_gender, criterion_age, optimizer_backbone, optimizer_classifier, scheduler_backbone, scheduler_classifier
 
 
-# evaluation function for validation data
 def func_eval(model, criterion_mask, criterion_gender, criterion_age, test_dataset, test_iter):
+    ''' evaluation function for validation data '''
     loss_total_sum = 0
     label = []
     predict = []
@@ -426,15 +430,29 @@ def main():
     print ("PyTorch version:[%s]."%(torch.__version__))
     print ("device:[%s]."%(CFG.device))
 
+    # set Config class with argparser
     get_config()
+
+    # for Reproducible Model experiment, set random seed
     set_random_seed()
+
+    # experiments management with neptune.ai
     set_logging()
+
+    # read csv file containing image information
     train_df = get_data()
+
+    # visulization image along with image information & target(mask formation, age, gender)
     data_visualization(train_df)
+
+    # stratified split by user to prevent data leakage
     X_stratified_train, X_stratified_test, y_stratified_train, y_stratified_test = get_stratified_data(train_df)
+
+    # get pytorch dataset & data loader
     train_dataset, test_dataset, train_iter, test_iter = get_data_iter(X_stratified_train, X_stratified_test, y_stratified_train, y_stratified_test)
 
     model, criterion_mask, criterion_gender, criterion_age, optimizer_backbone, optimizer_classifier, scheduler_backbone, scheduler_classifier = get_model(train_iter)
+
     train(model, criterion_mask, criterion_gender, criterion_age, optimizer_backbone, optimizer_classifier, scheduler_backbone, scheduler_classifier, train_dataset, test_dataset, train_iter, test_iter)
 
 

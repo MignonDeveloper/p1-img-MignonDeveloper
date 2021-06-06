@@ -22,23 +22,6 @@ class FocalLoss(nn.Module):
         )
 
 
-class LabelSmoothingLoss(nn.Module):
-    def __init__(self, classes=3, smoothing=0.0, dim=-1):
-        super(LabelSmoothingLoss, self).__init__()
-        self.confidence = 1.0 - smoothing
-        self.smoothing = smoothing
-        self.cls = classes
-        self.dim = dim
-
-    def forward(self, pred, target):
-        pred = pred.log_softmax(dim=self.dim)
-        with torch.no_grad():
-            true_dist = torch.zeros_like(pred)
-            true_dist.fill_(self.smoothing / (self.cls - 1))
-            true_dist.scatter_(1, target.data.unsqueeze(1), self.confidence)
-        return torch.mean(torch.sum(-true_dist * pred, dim=self.dim))
-
-
 # https://gist.github.com/SuperShinyEyes/dcc68a08ff8b615442e3bc6a9b55a354
 class F1Loss(nn.Module):
     def __init__(self, classes=3, epsilon=1e-7):
@@ -65,35 +48,35 @@ class F1Loss(nn.Module):
         return 1 - f1.mean()
 
 
-# name과 criterion(loss function) class를 묶는 entrypoint
+# argument에서 전달받은 name과 criterion(loss function)를 묶는 entrypoint dictionary
 _criterion_entrypoints = {
     'cross_entropy': nn.CrossEntropyLoss,
     'focal': FocalLoss,
-    'label_smoothing': LabelSmoothingLoss,
     'f1': F1Loss
 }
 
 
-# criterion(loss function) 이름을 가지는 class return
+# 전달받은 criterion(loss function) 이름을 가지는 class return
 def criterion_entrypoint(criterion_name):
     return _criterion_entrypoints[criterion_name]
 
 
-# criterion(loss function) list에 전달된 이름이 존재하는지 판단
+# criterion(loss function) entrypoint key list에 전달된 이름이 존재하는지 판단
 def is_criterion(criterion_name):
     return criterion_name in _criterion_entrypoints
 
 
 def create_criterion(criterion_name, **kwargs):
-    if is_criterion(criterion_name): # 정의한 criterion(loss function) list내에 이름이 있으면
+    if is_criterion(criterion_name): # 사용자가 전달한 이름이 정의한 criterion(loss function) list내에 있으면
         create_fn = criterion_entrypoint(criterion_name) # class를 가져와서
         criterion = create_fn(**kwargs) # 전달된 인자를 사용해 선언
     else:
         raise RuntimeError('Unknown loss (%s)' % criterion_name) # 없을 시, Error raise
         
-    return criterion # defined criterion(loss function) return
+    return criterion # 전달된 인자로 정의된 loss function return
 
 
+# for testing custom loss fucntion
 if __name__ == "__main__":
     pass
 
